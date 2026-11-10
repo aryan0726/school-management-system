@@ -1,0 +1,202 @@
+
+Table roles {
+  id bigint [pk, increment]
+  name varchar(50) [not null, unique]
+}
+
+Table users {
+  id bigint [pk, increment]
+  full_name varchar(100) [not null]
+  email varchar(150) [not null, unique]
+  password varchar(255) [not null]
+  role_id bigint [not null, ref: > roles.id]
+  active boolean [not null, default: true]
+  created_at timestamp
+}
+
+Table students {
+  id bigint [pk, increment]
+  admission_number varchar(50) [not null, unique]
+  full_name varchar(100) [not null]
+  date_of_birth date
+  gender varchar(20)
+  active boolean [not null, default: true]
+}
+
+Table guardians {
+  id bigint [pk, increment]
+  user_id bigint [not null, unique, ref: - users.id]
+  phone varchar(20)
+  address text
+}
+
+Table student_guardians {
+  id bigint [pk, increment]
+  student_id bigint [not null, ref: > students.id]
+  guardian_id bigint [not null, ref: > guardians.id]
+  relationship varchar(30) [not null]
+
+  indexes {
+    (student_id, guardian_id) [unique]
+  }
+}
+
+Table teachers {
+  id bigint [pk, increment]
+  user_id bigint [not null, unique, ref: - users.id]
+  employee_number varchar(50) [not null, unique]
+  qualification varchar(150)
+  joining_date date
+  active boolean [not null, default: true]
+}
+
+Table classes {
+  id bigint [pk, increment]
+  name varchar(50) [not null, unique]
+  active boolean [not null, default: true]
+}
+
+Table sections {
+  id bigint [pk, increment]
+  class_id bigint [not null, ref: > classes.id]
+  name varchar(20) [not null]
+
+  indexes {
+    (class_id, name) [unique]
+  }
+}
+
+Table subjects {
+  id bigint [pk, increment]
+  name varchar(100) [not null]
+  code varchar(20) [not null, unique]
+  active boolean [not null, default: true]
+}
+
+Table teacher_assignments {
+  id bigint [pk, increment]
+  teacher_id bigint [not null, ref: > teachers.id]
+  section_id bigint [not null, ref: > sections.id]
+  subject_id bigint [not null, ref: > subjects.id]
+  academic_year varchar(20) [not null]
+  active boolean [not null, default: true]
+
+  indexes {
+    (teacher_id, section_id, subject_id, academic_year) [unique]
+  }
+}
+
+Table enrollments {
+  id bigint [pk, increment]
+  student_id bigint [not null, ref: > students.id]
+  section_id bigint [not null, ref: > sections.id]
+  academic_year varchar(20) [not null]
+  enrollment_date date [not null]
+  status varchar(20) [not null, default: 'ACTIVE']
+
+  indexes {
+    (student_id, academic_year) [unique]
+  }
+}
+
+Table attendance_sessions {
+  id bigint [pk, increment]
+  section_id bigint [not null, ref: > sections.id]
+  attendance_date date [not null]
+  session_type varchar(20) [not null, default: 'DAILY']
+  marked_by bigint [not null, ref: > teachers.id]
+  created_at timestamp
+
+  indexes {
+    (section_id, attendance_date, session_type) [unique]
+  }
+}
+
+Table attendance_records {
+  id bigint [pk, increment]
+  session_id bigint [not null, ref: > attendance_sessions.id]
+  student_id bigint [not null, ref: > students.id]
+  status varchar(20) [not null]
+  remarks varchar(255)
+
+  indexes {
+    (session_id, student_id) [unique]
+  }
+}
+
+Table exams {
+  id bigint [pk, increment]
+  name varchar(100) [not null]
+  section_id bigint [not null, ref: > sections.id]
+  academic_year varchar(20) [not null]
+  start_date date [not null]
+  end_date date [not null]
+  status varchar(20) [not null, default: 'DRAFT']
+}
+
+Table exam_subjects {
+  id bigint [pk, increment]
+  exam_id bigint [not null, ref: > exams.id]
+  subject_id bigint [not null, ref: > subjects.id]
+  max_marks decimal(5,2) [not null]
+  passing_marks decimal(5,2) [not null]
+  exam_date date [not null]
+
+  indexes {
+    (exam_id, subject_id) [unique]
+  }
+}
+
+Table marks {
+  id bigint [pk, increment]
+  exam_subject_id bigint [not null, ref: > exam_subjects.id]
+  student_id bigint [not null, ref: > students.id]
+  obtained_marks decimal(5,2) [not null]
+  remarks varchar(255)
+  entered_by bigint [not null, ref: > teachers.id]
+  created_at timestamp
+
+  indexes {
+    (exam_subject_id, student_id) [unique]
+  }
+}
+
+Table grading_rules {
+  id bigint [pk, increment]
+  grade varchar(5) [not null, unique]
+  min_percentage decimal(5,2) [not null]
+  max_percentage decimal(5,2) [not null]
+  description varchar(100)
+}
+
+Table fee_invoices {
+  id bigint [pk, increment]
+  student_id bigint [not null, ref: > students.id]
+  invoice_number varchar(50) [not null, unique]
+  total_amount decimal(10,2) [not null]
+  due_date date [not null]
+  status varchar(20) [not null, default: 'UNPAID']
+  created_at timestamp
+}
+
+Table fee_payments {
+  id bigint [pk, increment]
+  invoice_id bigint [not null, ref: > fee_invoices.id]
+  amount decimal(10,2) [not null]
+  payment_date timestamp [not null]
+  payment_method varchar(30) [not null]
+  transaction_reference varchar(100) [not null, unique]
+  status varchar(20) [not null, default: 'SUCCESS']
+  recorded_by bigint [not null, ref: > users.id]
+}
+
+Table audit_logs {
+  id bigint [pk, increment]
+  user_id bigint [not null, ref: > users.id]
+  action varchar(100) [not null]
+  entity_type varchar(100) [not null]
+  entity_id bigint [not null]
+  old_value text
+  new_value text
+  created_at timestamp [not null]
+}
