@@ -4,6 +4,7 @@ import Login from "./pages/auth/Login";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Students from "./pages/admin/Students";
 import Teachers from "./pages/admin/Teachers";
+import Classes from "./pages/admin/Classes";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/students" element={<Students />} />
         <Route path="/admin/teachers" element={<Teachers />} />
+        <Route path="/admin/classes" element={<Classes />} />
       </Routes>
     </BrowserRouter>
   );

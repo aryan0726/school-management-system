@@ -8,17 +8,15 @@ const API_BASE = "http://localhost:8080/api/admin";
 function AdminDashboard() {
   const navigate = useNavigate();
 
-  // Dashboard statistics
-  const [totalStudents, setTotalStudents] = useState(null);
-  const [totalTeachers, setTotalTeachers] = useState(null);
+  const [counts, setCounts] = useState({
+    students: null,
+    teachers: null,
+    classes: null,
+  });
 
-  const [studentsLoading, setStudentsLoading] = useState(true);
-  const [teachersLoading, setTeachersLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState({});
 
-  const [studentsError, setStudentsError] = useState("");
-  const [teachersError, setTeachersError] = useState("");
-
-  // Logged-in admin details
   const [user] = useState(() => {
     try {
       return JSON.parse(
@@ -29,130 +27,139 @@ function AdminDashboard() {
     }
   });
 
-  // Fetch real dashboard statistics
+  // Fetch dashboard statistics
   useEffect(() => {
     const controller = new AbortController();
 
-    const fetchCount = async (endpoint, type) => {
-      try {
-        const token = sessionStorage.getItem("token");
+    const fetchDashboardStats = async () => {
+      setLoading(true);
+      setErrors({});
 
-        if (!token) {
-          throw new Error(
-            "Session missing. Please log in again."
+      const token = sessionStorage.getItem("token");
+
+      if (!token) {
+        setErrors({
+          auth: "Session missing. Please log in again.",
+        });
+        setLoading(false);
+        return;
+      }
+
+      const endpoints = [
+        "students",
+        "teachers",
+        "classes",
+      ];
+
+      const results = await Promise.allSettled(
+        endpoints.map(async (endpoint) => {
+          const response = await fetch(
+            `${API_BASE}/${endpoint}`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+              signal: controller.signal,
+            }
           );
-        }
 
-        const response = await fetch(
-          `${API_BASE}/${endpoint}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            signal: controller.signal,
-          }
-        );
+          if (!response.ok) {
+            if (
+              response.status === 401 ||
+              response.status === 403
+            ) {
+              throw new Error(
+                "Session expired or access denied."
+              );
+            }
 
-        if (!response.ok) {
-          if (
-            response.status === 401 ||
-            response.status === 403
-          ) {
             throw new Error(
-              "Session expired or access denied. Please log in again."
+              `Failed to fetch ${endpoint}.`
             );
           }
 
-          throw new Error(
-            `Unable to fetch ${type} count.`
-          );
-        }
+          const data = await response.json();
 
-        const data = await response.json();
-
-        if (!Array.isArray(data)) {
-          throw new Error(
-            `Invalid ${type} data received.`
-          );
-        }
-
-        if (controller.signal.aborted) return;
-
-        if (type === "students") {
-          setTotalStudents(data.length);
-        } else {
-          setTotalTeachers(data.length);
-        }
-
-      } catch (error) {
-        if (
-          error.name === "AbortError" ||
-          controller.signal.aborted
-        ) {
-          return;
-        }
-
-        console.error(`${type} count error:`, error);
-
-        if (type === "students") {
-          setStudentsError(error.message);
-          setTotalStudents(null);
-        } else {
-          setTeachersError(error.message);
-          setTotalTeachers(null);
-        }
-
-      } finally {
-        if (!controller.signal.aborted) {
-          if (type === "students") {
-            setStudentsLoading(false);
-          } else {
-            setTeachersLoading(false);
+          if (!Array.isArray(data)) {
+            throw new Error(
+              `Invalid ${endpoint} data received.`
+            );
           }
+
+          return data.length;
+        })
+      );
+
+      if (controller.signal.aborted) return;
+
+      const updatedCounts = {
+        students: null,
+        teachers: null,
+        classes: null,
+      };
+
+      const updatedErrors = {};
+
+      results.forEach((result, index) => {
+        const endpoint = endpoints[index];
+
+        if (result.status === "fulfilled") {
+          updatedCounts[endpoint] = result.value;
+        } else if (
+          result.reason?.name !== "AbortError"
+        ) {
+          updatedErrors[endpoint] =
+            result.reason?.message ||
+            "Unable to load data.";
         }
-      }
+      });
+
+      setCounts(updatedCounts);
+      setErrors(updatedErrors);
+      setLoading(false);
     };
 
-    fetchCount("students", "students");
-    fetchCount("teachers", "teachers");
+    fetchDashboardStats();
 
     return () => controller.abort();
   }, []);
 
-  // Dashboard statistic cards
+  // Dashboard cards
   const stats = [
     {
       title: "Total Students",
-      value: studentsLoading
-        ? "..."
-        : totalStudents ?? "—",
+      value: counts.students,
       icon: "🎓",
       color: "bg-blue-100",
     },
     {
       title: "Total Teachers",
-      value: teachersLoading
-        ? "..."
-        : totalTeachers ?? "—",
+      value: counts.teachers,
       icon: "👨‍🏫",
       color: "bg-purple-100",
     },
     {
+      title: "Total Classes",
+      value: counts.classes,
+      icon: "🏫",
+      color: "bg-indigo-100",
+    },
+    {
       title: "Attendance",
-      value: "—",
+      value: null,
       icon: "📅",
       color: "bg-green-100",
     },
     {
       title: "Pending Fees",
-      value: "—",
+      value: null,
       icon: "💳",
       color: "bg-orange-100",
     },
   ];
 
-  // Quick actions
+  // Dashboard quick actions
   const quickActions = [
     {
       icon: "➕",
@@ -176,19 +183,24 @@ function AdminDashboard() {
       desc: "Organize classes and sections",
       path: "/admin/classes",
       buttonLabel: "Open Classes",
-      available: false,
+      available: true,
     },
   ];
+
+  const formatValue = (value) => {
+    if (loading) return "...";
+    return value ?? "—";
+  };
 
   return (
     <div className="flex min-h-screen bg-slate-50">
 
-      {/* Sidebar */}
+      {/* SIDEBAR */}
       <AdminSidebar />
 
       <div className="min-w-0 flex-1">
 
-        {/* Top Navbar */}
+        {/* HEADER */}
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-5 md:px-8">
 
           <div>
@@ -208,10 +220,10 @@ function AdminDashboard() {
 
         </header>
 
-        {/* Main Dashboard */}
+        {/* MAIN CONTENT */}
         <main className="p-6 md:p-8">
 
-          {/* Welcome Banner */}
+          {/* WELCOME BANNER */}
           <div className="rounded-2xl bg-gradient-to-r from-indigo-700 to-violet-600 p-8 text-white shadow-lg">
 
             <h2 className="text-2xl font-bold">
@@ -226,8 +238,8 @@ function AdminDashboard() {
 
           </div>
 
-          {/* Statistics Cards */}
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          {/* STATISTICS */}
+          <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
 
             {stats.map((stat) => (
               <div
@@ -246,7 +258,7 @@ function AdminDashboard() {
                 </p>
 
                 <h3 className="mt-2 text-3xl font-bold text-slate-900">
-                  {stat.value}
+                  {formatValue(stat.value)}
                 </h3>
 
               </div>
@@ -254,23 +266,26 @@ function AdminDashboard() {
 
           </div>
 
-          {/* API Errors */}
-          {(studentsError || teachersError) && (
+          {/* API ERRORS */}
+          {Object.keys(errors).length > 0 && (
             <div
               role="alert"
               className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
             >
-              {studentsError && (
-                <p>Students: {studentsError}</p>
-              )}
 
-              {teachersError && (
-                <p>Teachers: {teachersError}</p>
-              )}
+              {Object.entries(errors).map(([key, message]) => (
+                <p key={key} className="mb-1 last:mb-0">
+                  <span className="font-semibold capitalize">
+                    {key}:
+                  </span>{" "}
+                  {message}
+                </p>
+              ))}
+
             </div>
           )}
 
-          {/* Quick Actions */}
+          {/* QUICK ACTIONS */}
           <section className="mt-10">
 
             <h2 className="mb-5 text-xl font-bold text-slate-900">
@@ -300,16 +315,11 @@ function AdminDashboard() {
                   {action.available ? (
                     <button
                       type="button"
-                      onClick={() =>
-                        navigate(action.path)
-                      }
+                      onClick={() => navigate(action.path)}
                       className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800"
                     >
                       {action.buttonLabel}
-
-                      <span aria-hidden="true">
-                        →
-                      </span>
+                      <span aria-hidden="true">→</span>
                     </button>
                   ) : (
                     <span className="mt-5 inline-block text-sm font-semibold text-slate-400">
@@ -321,9 +331,10 @@ function AdminDashboard() {
               ))}
 
             </div>
+
           </section>
 
-          {/* Recent Activity */}
+          {/* RECENT ACTIVITY */}
           <section className="mt-10 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
 
             <h2 className="text-xl font-bold text-slate-900">
