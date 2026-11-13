@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/auth/Login";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Students from "./pages/admin/Students";
+import Teachers from "./pages/admin/Teachers";
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/students" element={<Students />} />
+        <Route path="/admin/teachers" element={<Teachers />} />
       </Routes>
     </BrowserRouter>
   );
