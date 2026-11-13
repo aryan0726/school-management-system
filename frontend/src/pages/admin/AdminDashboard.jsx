@@ -3,17 +3,21 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminSidebar from "../../components/layout/AdminSidebar";
 
-const API_BASE = "http://localhost:8080/api/admin";
+const API_BASE = "http://localhost:8080/api";
+
+const initialCounts = {
+  students: null,
+  teachers: null,
+  classes: null,
+  attendance: null,
+  present: null,
+  absent: null,
+};
 
 function AdminDashboard() {
   const navigate = useNavigate();
 
-  const [counts, setCounts] = useState({
-    students: null,
-    teachers: null,
-    classes: null,
-  });
-
+  const [counts, setCounts] = useState(initialCounts);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
 
@@ -27,11 +31,10 @@ function AdminDashboard() {
     }
   });
 
-  // Fetch dashboard statistics
   useEffect(() => {
     const controller = new AbortController();
 
-    const fetchDashboardStats = async () => {
+    const loadDashboard = async () => {
       setLoading(true);
       setErrors({});
 
@@ -45,24 +48,34 @@ function AdminDashboard() {
         return;
       }
 
-      const endpoints = [
-        "students",
-        "teachers",
-        "classes",
+      const sources = [
+        {
+          key: "students",
+          url: `${API_BASE}/admin/students`,
+        },
+        {
+          key: "teachers",
+          url: `${API_BASE}/admin/teachers`,
+        },
+        {
+          key: "classes",
+          url: `${API_BASE}/admin/classes`,
+        },
+        {
+          key: "attendance",
+          url: `${API_BASE}/attendance/sessions`,
+        },
       ];
 
       const results = await Promise.allSettled(
-        endpoints.map(async (endpoint) => {
-          const response = await fetch(
-            `${API_BASE}/${endpoint}`,
-            {
-              method: "GET",
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-              signal: controller.signal,
-            }
-          );
+        sources.map(async (source) => {
+          const response = await fetch(source.url, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            signal: controller.signal,
+          });
 
           if (!response.ok) {
             if (
@@ -70,12 +83,12 @@ function AdminDashboard() {
               response.status === 403
             ) {
               throw new Error(
-                "Session expired or access denied."
+                "Session expired or access denied. Please log in again."
               );
             }
 
             throw new Error(
-              `Failed to fetch ${endpoint}.`
+              `Unable to load ${source.key}.`
             );
           }
 
@@ -83,36 +96,55 @@ function AdminDashboard() {
 
           if (!Array.isArray(data)) {
             throw new Error(
-              `Invalid ${endpoint} data received.`
+              `Invalid ${source.key} data received.`
             );
           }
 
-          return data.length;
+          return data;
         })
       );
 
       if (controller.signal.aborted) return;
 
-      const updatedCounts = {
-        students: null,
-        teachers: null,
-        classes: null,
-      };
-
+      const updatedCounts = { ...initialCounts };
       const updatedErrors = {};
 
       results.forEach((result, index) => {
-        const endpoint = endpoints[index];
+        const key = sources[index].key;
 
-        if (result.status === "fulfilled") {
-          updatedCounts[endpoint] = result.value;
-        } else if (
-          result.reason?.name !== "AbortError"
-        ) {
-          updatedErrors[endpoint] =
-            result.reason?.message ||
-            "Unable to load data.";
+        if (result.status === "rejected") {
+          if (result.reason?.name !== "AbortError") {
+            updatedErrors[key] =
+              result.reason?.message ||
+              "Unable to load data.";
+          }
+
+          return;
         }
+
+        const data = result.value;
+
+        if (key !== "attendance") {
+          updatedCounts[key] = data.length;
+          return;
+        }
+
+        // Calculate attendance statistics
+        updatedCounts.attendance = data.length;
+
+        const records = data.flatMap((session) =>
+          Array.isArray(session.records)
+            ? session.records
+            : []
+        );
+
+        updatedCounts.present = records.filter(
+          (record) => record.status === "PRESENT"
+        ).length;
+
+        updatedCounts.absent = records.filter(
+          (record) => record.status === "ABSENT"
+        ).length;
       });
 
       setCounts(updatedCounts);
@@ -120,97 +152,95 @@ function AdminDashboard() {
       setLoading(false);
     };
 
-    fetchDashboardStats();
+    loadDashboard();
 
     return () => controller.abort();
   }, []);
 
-  // Dashboard cards
+  const getValue = (key) => {
+    if (loading) return "...";
+
+    return counts[key] ?? "—";
+  };
+
   const stats = [
     {
       title: "Total Students",
-      value: counts.students,
+      key: "students",
       icon: "🎓",
       color: "bg-blue-100",
     },
     {
       title: "Total Teachers",
-      value: counts.teachers,
+      key: "teachers",
       icon: "👨‍🏫",
       color: "bg-purple-100",
     },
     {
       title: "Total Classes",
-      value: counts.classes,
+      key: "classes",
       icon: "🏫",
       color: "bg-indigo-100",
     },
     {
-  icon: "📚",
-  title: "Academic Management",
-  desc: "Subjects, enrollments and teacher assignments",
-  path: "/admin/academic",
-  buttonLabel: "Open Academics",
-  available: true,
-},
-    {
-      title: "Attendance",
-      value: null,
+      title: "Attendance Sessions",
+      key: "attendance",
       icon: "📅",
       color: "bg-green-100",
     },
     {
       title: "Pending Fees",
-      value: null,
+      key: null,
       icon: "💳",
       color: "bg-orange-100",
     },
   ];
 
-  // Dashboard quick actions
   const quickActions = [
     {
       icon: "➕",
       title: "Add Student",
-      desc: "Register a new student",
+      desc: "Register and manage students",
       path: "/admin/students",
-      buttonLabel: "Open Students",
-      available: true,
+      label: "Open Students",
     },
     {
       icon: "👨‍🏫",
       title: "Manage Teachers",
-      desc: "View and manage faculty",
+      desc: "Manage faculty and teacher accounts",
       path: "/admin/teachers",
-      buttonLabel: "Open Teachers",
-      available: true,
+      label: "Open Teachers",
     },
     {
       icon: "🏫",
       title: "Manage Classes",
       desc: "Organize classes and sections",
       path: "/admin/classes",
-      buttonLabel: "Open Classes",
-      available: true,
+      label: "Open Classes",
+    },
+    {
+      icon: "📚",
+      title: "Academic Management",
+      desc: "Subjects, enrollments and assignments",
+      path: "/admin/academic",
+      label: "Open Academics",
+    },
+    {
+      icon: "📅",
+      title: "Attendance Management",
+      desc: "View daily attendance and student records",
+      path: "/admin/attendance",
+      label: "Open Attendance",
     },
   ];
 
-  const formatValue = (value) => {
-    if (loading) return "...";
-    return value ?? "—";
-  };
-
   return (
     <div className="flex min-h-screen bg-slate-50">
-
-      {/* SIDEBAR */}
       <AdminSidebar />
 
       <div className="min-w-0 flex-1">
-
-        {/* HEADER */}
+        {/* Header */}
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-5 md:px-8">
-
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
               Dashboard Overview
@@ -225,15 +255,11 @@ function AdminDashboard() {
           <div className="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-100 font-bold text-indigo-700">
             {user?.fullName?.charAt(0)?.toUpperCase() || "A"}
           </div>
-
         </header>
 
-        {/* MAIN CONTENT */}
         <main className="p-6 md:p-8">
-
-          {/* WELCOME BANNER */}
+          {/* Welcome Banner */}
           <div className="rounded-2xl bg-gradient-to-r from-indigo-700 to-violet-600 p-8 text-white shadow-lg">
-
             <h2 className="text-2xl font-bold">
               Welcome to EduSphere 🎓
             </h2>
@@ -243,18 +269,15 @@ function AdminDashboard() {
               academic activities and financial records
               from one centralized dashboard.
             </p>
-
           </div>
 
-          {/* STATISTICS */}
+          {/* Statistics Cards */}
           <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
-
             {stats.map((stat) => (
               <div
                 key={stat.title}
                 className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm"
               >
-
                 <div
                   className={`mb-5 flex h-12 w-12 items-center justify-center rounded-xl text-2xl ${stat.color}`}
                 >
@@ -266,21 +289,34 @@ function AdminDashboard() {
                 </p>
 
                 <h3 className="mt-2 text-3xl font-bold text-slate-900">
-                  {formatValue(stat.value)}
+                  {stat.key ? getValue(stat.key) : "—"}
                 </h3>
 
+                {stat.key === "attendance" &&
+                  !loading &&
+                  counts.attendance !== null && (
+                    <p className="mt-3 text-xs text-slate-500">
+                      <span className="font-semibold text-green-700">
+                        {counts.present} Present
+                      </span>
+
+                      {" · "}
+
+                      <span className="font-semibold text-red-600">
+                        {counts.absent} Absent
+                      </span>
+                    </p>
+                  )}
               </div>
             ))}
-
           </div>
 
-          {/* API ERRORS */}
+          {/* API Errors */}
           {Object.keys(errors).length > 0 && (
             <div
               role="alert"
               className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
             >
-
               {Object.entries(errors).map(([key, message]) => (
                 <p key={key} className="mb-1 last:mb-0">
                   <span className="font-semibold capitalize">
@@ -289,25 +325,21 @@ function AdminDashboard() {
                   {message}
                 </p>
               ))}
-
             </div>
           )}
 
-          {/* QUICK ACTIONS */}
+          {/* Quick Actions */}
           <section className="mt-10">
-
             <h2 className="mb-5 text-xl font-bold text-slate-900">
               Quick Actions
             </h2>
 
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-
               {quickActions.map((action) => (
                 <div
                   key={action.title}
                   className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm"
                 >
-
                   <div className="mb-4 text-3xl">
                     {action.icon}
                   </div>
@@ -320,42 +352,30 @@ function AdminDashboard() {
                     {action.desc}
                   </p>
 
-                  {action.available ? (
-                    <button
-                      type="button"
-                      onClick={() => navigate(action.path)}
-                      className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800"
-                    >
-                      {action.buttonLabel}
-                      <span aria-hidden="true">→</span>
-                    </button>
-                  ) : (
-                    <span className="mt-5 inline-block text-sm font-semibold text-slate-400">
-                      Coming soon
-                    </span>
-                  )}
-
+                  <button
+                    type="button"
+                    onClick={() => navigate(action.path)}
+                    className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800"
+                  >
+                    {action.label}
+                    <span aria-hidden="true">→</span>
+                  </button>
                 </div>
               ))}
-
             </div>
-
           </section>
 
-          {/* RECENT ACTIVITY */}
+          {/* Recent Activity */}
           <section className="mt-10 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
-
             <h2 className="text-xl font-bold text-slate-900">
               Recent Activity
             </h2>
 
             <p className="mt-4 text-sm text-slate-500">
               Recent school activities will appear here
-              once the backend APIs are connected.
+              once activity reporting is implemented.
             </p>
-
           </section>
-
         </main>
       </div>
     </div>
