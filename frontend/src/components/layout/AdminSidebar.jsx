@@ -6,6 +6,7 @@ const menuItems = [
   { icon: "🎓", label: "Students", path: "/admin/students" },
   { icon: "👨‍🏫", label: "Teachers", path: "/admin/teachers" },
   { icon: "🏫", label: "Classes", path: "/admin/classes" },
+  { icon: "📚", label: "Academic Management", path: "/admin/academic" },
   { icon: "📅", label: "Attendance", path: "/admin/attendance" },
   { icon: "📝", label: "Exams & Results", path: "/admin/exams" },
   { icon: "💳", label: "Fee Management", path: "/admin/fees" },

@@ -146,6 +146,14 @@ function AdminDashboard() {
       color: "bg-indigo-100",
     },
     {
+  icon: "📚",
+  title: "Academic Management",
+  desc: "Subjects, enrollments and teacher assignments",
+  path: "/admin/academic",
+  buttonLabel: "Open Academics",
+  available: true,
+},
+    {
       title: "Attendance",
       value: null,
       icon: "📅",
