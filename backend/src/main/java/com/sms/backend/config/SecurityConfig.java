@@ -5,6 +5,8 @@ import com.sms.backend.security.JwtAuthenticationFilter;
 import com.sms.backend.service.CustomUserDetailsService;
 import com.sms.backend.service.JwtService;
 
+import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -34,7 +36,8 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration configuration) throws Exception {
+            AuthenticationConfiguration configuration
+    ) throws Exception {
         return configuration.getAuthenticationManager();
     }
 
@@ -46,17 +49,52 @@ public class SecurityConfig {
     ) throws Exception {
 
         JwtAuthenticationFilter jwtFilter =
-                new JwtAuthenticationFilter(jwtService, userDetailsService);
+                new JwtAuthenticationFilter(
+                        jwtService,
+                        userDetailsService
+                );
 
         http
                 .cors(cors -> {})
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers(
+                                "/api/auth/login"
+                        ).permitAll()
                         .anyRequest().authenticated()
+                )
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(
+                                (request, response, exception) -> {
+                                    response.setStatus(
+                                            HttpServletResponse.SC_UNAUTHORIZED
+                                    );
+                                    response.setContentType(
+                                            "application/json"
+                                    );
+                                    response.getWriter().write(
+                                            "{\"message\":\"Authentication required\"}"
+                                    );
+                                }
+                        )
+                        .accessDeniedHandler(
+                                (request, response, exception) -> {
+                                    response.setStatus(
+                                            HttpServletResponse.SC_FORBIDDEN
+                                    );
+                                    response.setContentType(
+                                            "application/json"
+                                    );
+                                    response.getWriter().write(
+                                            "{\"message\":\"Access denied\"}"
+                                    );
+                                }
+                        )
                 )
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
@@ -68,28 +106,42 @@ public class SecurityConfig {
         return http.build();
     }
 
-
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
-        CorsConfiguration config = new CorsConfiguration();
+        CorsConfiguration config =
+                new CorsConfiguration();
 
-        config.setAllowedOrigins(List.of("http://localhost:5173"));
+        config.setAllowedOrigins(
+                List.of("http://localhost:5173")
+        );
 
-        config.setAllowedMethods(List.of(
-                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
-        ));
+        config.setAllowedMethods(
+                List.of(
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "OPTIONS"
+                )
+        );
 
-        config.setAllowedHeaders(List.of(
-                "Authorization", "Content-Type"
-        ));
+        config.setAllowedHeaders(
+                List.of(
+                        "Authorization",
+                        "Content-Type"
+                )
+        );
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
 
-        source.registerCorsConfiguration("/**", config);
+        source.registerCorsConfiguration(
+                "/**",
+                config
+        );
 
         return source;
     }
-
 }
